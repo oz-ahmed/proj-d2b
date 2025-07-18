@@ -1,0 +1,342 @@
+{
+    "name": "pl-postgres-sales-campaign-bronze",
+    "objectId": "2e18b809-23e8-4362-a7a3-52584099ed4d",
+    "properties": {
+        "activities": [
+            {
+                "name": "lookup-wh-metadata-for-postgres",
+                "type": "Lookup",
+                "dependsOn": [],
+                "policy": {
+                    "timeout": "0.12:00:00",
+                    "retry": 0,
+                    "retryIntervalInSeconds": 30,
+                    "secureOutput": false,
+                    "secureInput": false
+                },
+                "typeProperties": {
+                    "source": {
+                        "type": "DataWarehouseSource",
+                        "queryTimeout": "02:00:00",
+                        "partitionOption": "None"
+                    },
+                    "firstRowOnly": false,
+                    "datasetSettings": {
+                        "annotations": [],
+                        "linkedService": {
+                            "name": "wh-metadata-dev",
+                            "properties": {
+                                "annotations": [],
+                                "type": "DataWarehouse",
+                                "typeProperties": {
+                                    "endpoint": "yc6wbjsig3hexo3nspjdjm47fy-cvzf7zhreqvebdsholirmyud3i.datawarehouse.fabric.microsoft.com",
+                                    "artifactId": "024b7e92-a415-4561-ad7b-69d893beea44",
+                                    "workspaceId": "e45f7215-24f1-402a-8e47-72d1166283da"
+                                }
+                            }
+                        },
+                        "type": "DataWarehouseTable",
+                        "schema": [],
+                        "typeProperties": {
+                            "schema": "finance",
+                            "table": "postgres"
+                        }
+                    }
+                }
+            },
+            {
+                "name": "ForEach Activity Run",
+                "type": "ForEach",
+                "dependsOn": [
+                    {
+                        "activity": "lookup-wh-metadata-for-postgres",
+                        "dependencyConditions": [
+                            "Succeeded"
+                        ]
+                    }
+                ],
+                "typeProperties": {
+                    "items": {
+                        "value": "@activity('lookup-wh-metadata-for-postgres').output.value",
+                        "type": "Expression"
+                    },
+                    "isSequential": true,
+                    "activities": [
+                        {
+                            "name": "Schema Name",
+                            "type": "SetVariable",
+                            "dependsOn": [],
+                            "policy": {
+                                "secureOutput": false,
+                                "secureInput": false
+                            },
+                            "typeProperties": {
+                                "variableName": "schema_name",
+                                "value": {
+                                    "value": "@item().schema_name",
+                                    "type": "Expression"
+                                }
+                            }
+                        },
+                        {
+                            "name": "Table Name",
+                            "type": "SetVariable",
+                            "dependsOn": [],
+                            "policy": {
+                                "secureOutput": false,
+                                "secureInput": false
+                            },
+                            "typeProperties": {
+                                "variableName": "table_name",
+                                "value": {
+                                    "value": "@item().table_name",
+                                    "type": "Expression"
+                                }
+                            }
+                        },
+                        {
+                            "name": "Incremental Load Column",
+                            "type": "SetVariable",
+                            "dependsOn": [],
+                            "policy": {
+                                "secureOutput": false,
+                                "secureInput": false
+                            },
+                            "typeProperties": {
+                                "variableName": "incr_load_col",
+                                "value": {
+                                    "value": "@item().incr_load_col",
+                                    "type": "Expression"
+                                }
+                            }
+                        },
+                        {
+                            "name": "Incremental Load Value",
+                            "type": "SetVariable",
+                            "dependsOn": [],
+                            "policy": {
+                                "secureOutput": false,
+                                "secureInput": false
+                            },
+                            "typeProperties": {
+                                "variableName": "incr_load_value",
+                                "value": {
+                                    "value": "@concat('''',item().incr_load_value,'''')",
+                                    "type": "Expression"
+                                }
+                            }
+                        },
+                        {
+                            "name": "Copy Postgres Data to Bronze LH",
+                            "type": "Copy",
+                            "dependsOn": [
+                                {
+                                    "activity": "Table Name",
+                                    "dependencyConditions": [
+                                        "Succeeded"
+                                    ]
+                                },
+                                {
+                                    "activity": "Incremental Load Column",
+                                    "dependencyConditions": [
+                                        "Succeeded"
+                                    ]
+                                },
+                                {
+                                    "activity": "Schema Name",
+                                    "dependencyConditions": [
+                                        "Succeeded"
+                                    ]
+                                },
+                                {
+                                    "activity": "Incremental Load Value",
+                                    "dependencyConditions": [
+                                        "Succeeded"
+                                    ]
+                                }
+                            ],
+                            "policy": {
+                                "timeout": "0.12:00:00",
+                                "retry": 0,
+                                "retryIntervalInSeconds": 30,
+                                "secureOutput": false,
+                                "secureInput": false
+                            },
+                            "typeProperties": {
+                                "source": {
+                                    "type": "AzurePostgreSqlSource",
+                                    "query": {
+                                        "value": "@concat('select * from ',variables('schema_name'),'.',variables('table_name'), ' where ', variables('incr_load_col'), '>',variables('incr_load_value'))",
+                                        "type": "Expression"
+                                    },
+                                    "partitionOption": "None",
+                                    "queryTimeout": "02:00:00",
+                                    "datasetSettings": {
+                                        "annotations": [],
+                                        "type": "AzurePostgreSqlTable",
+                                        "schema": [],
+                                        "version": "2.0",
+                                        "externalReferences": {
+                                            "connection": "ab530bdf-8052-4228-bb27-e37ce94ddf0d"
+                                        }
+                                    }
+                                },
+                                "sink": {
+                                    "type": "ParquetSink",
+                                    "storeSettings": {
+                                        "type": "LakehouseWriteSettings"
+                                    },
+                                    "formatSettings": {
+                                        "type": "ParquetWriteSettings",
+                                        "enableVertiParquet": true
+                                    },
+                                    "datasetSettings": {
+                                        "annotations": [],
+                                        "linkedService": {
+                                            "name": "lh_bronze",
+                                            "properties": {
+                                                "annotations": [],
+                                                "type": "Lakehouse",
+                                                "typeProperties": {
+                                                    "workspaceId": "e45f7215-24f1-402a-8e47-72d1166283da",
+                                                    "artifactId": "47b79fec-268e-46b2-a697-2a6fe1653ede",
+                                                    "rootFolder": "Files"
+                                                }
+                                            }
+                                        },
+                                        "type": "Parquet",
+                                        "typeProperties": {
+                                            "location": {
+                                                "type": "LakehouseLocation",
+                                                "folderPath": {
+                                                    "value": "@concat('bronze/', item().table_name, '/year=', formatDateTime(utcNow(), 'yyyy'), '/month=', formatDateTime(utcNow(), 'MM'), '/day=', formatDateTime(utcNow(), 'dd'), '/')",
+                                                    "type": "Expression"
+                                                }
+                                            },
+                                            "compressionCodec": "snappy"
+                                        },
+                                        "schema": []
+                                    }
+                                },
+                                "enableStaging": false,
+                                "translator": {
+                                    "type": "TabularTranslator",
+                                    "typeConversion": true,
+                                    "typeConversionSettings": {
+                                        "allowDataTruncation": true,
+                                        "treatBooleanAsNumber": false
+                                    }
+                                }
+                            }
+                        },
+                        {
+                            "name": "Lookup Most Recent Run",
+                            "type": "Lookup",
+                            "dependsOn": [
+                                {
+                                    "activity": "Copy Postgres Data to Bronze LH",
+                                    "dependencyConditions": [
+                                        "Succeeded"
+                                    ]
+                                }
+                            ],
+                            "policy": {
+                                "timeout": "0.12:00:00",
+                                "retry": 0,
+                                "retryIntervalInSeconds": 30,
+                                "secureOutput": false,
+                                "secureInput": false
+                            },
+                            "typeProperties": {
+                                "source": {
+                                    "type": "AzurePostgreSqlSource",
+                                    "query": {
+                                        "value": "@concat('select max(',variables('incr_load_col'),') as Max_Date', ' from ',variables('schema_name'), '.', variables('table_name'))",
+                                        "type": "Expression"
+                                    },
+                                    "partitionOption": "None",
+                                    "queryTimeout": "02:00:00"
+                                },
+                                "datasetSettings": {
+                                    "annotations": [],
+                                    "type": "AzurePostgreSqlTable",
+                                    "schema": [],
+                                    "version": "2.0",
+                                    "externalReferences": {
+                                        "connection": "ab530bdf-8052-4228-bb27-e37ce94ddf0d"
+                                    }
+                                }
+                            }
+                        },
+                        {
+                            "name": "Proc Most Recent Run Date",
+                            "type": "SqlServerStoredProcedure",
+                            "dependsOn": [
+                                {
+                                    "activity": "Lookup Most Recent Run",
+                                    "dependencyConditions": [
+                                        "Succeeded"
+                                    ]
+                                }
+                            ],
+                            "policy": {
+                                "timeout": "0.12:00:00",
+                                "retry": 0,
+                                "retryIntervalInSeconds": 30,
+                                "secureOutput": false,
+                                "secureInput": false
+                            },
+                            "typeProperties": {
+                                "storedProcedureName": "[finance].[proc_postgres_metadata_update]",
+                                "storedProcedureParameters": {
+                                    "table_name": {
+                                        "value": {
+                                            "value": "@variables('table_name')",
+                                            "type": "Expression"
+                                        },
+                                        "type": "String"
+                                    },
+                                    "incr_load_value": {
+                                        "value": {
+                                            "value": "@activity('Lookup Most Recent Run').output.firstRow.Max_Date",
+                                            "type": "Expression"
+                                        },
+                                        "type": "Datetime"
+                                    }
+                                }
+                            },
+                            "linkedService": {
+                                "name": "wh-metadata-dev",
+                                "properties": {
+                                    "annotations": [],
+                                    "type": "DataWarehouse",
+                                    "typeProperties": {
+                                        "endpoint": "yc6wbjsig3hexo3nspjdjm47fy-cvzf7zhreqvebdsholirmyud3i.datawarehouse.fabric.microsoft.com",
+                                        "artifactId": "024b7e92-a415-4561-ad7b-69d893beea44",
+                                        "workspaceId": "e45f7215-24f1-402a-8e47-72d1166283da"
+                                    }
+                                }
+                            }
+                        }
+                    ]
+                }
+            }
+        ],
+        "variables": {
+            "schema_name": {
+                "type": "String"
+            },
+            "table_name": {
+                "type": "String"
+            },
+            "incr_load_col": {
+                "type": "String"
+            },
+            "incr_load_value": {
+                "type": "String"
+            }
+        },
+        "lastModifiedByObjectId": "4c086452-657c-4247-bcd5-ad9c11534d93",
+        "lastPublishTime": "2025-07-08T09:45:56Z"
+    }
+}
