@@ -6,6 +6,8 @@
             {
                 "name": "lookup-wh-metadata-for-postgres",
                 "type": "Lookup",
+                "name": "lookup-wh-metadata-for-postgres",
+                "type": "Lookup",
                 "dependsOn": [],
                 "policy": {
                     "timeout": "0.01:00:00",
